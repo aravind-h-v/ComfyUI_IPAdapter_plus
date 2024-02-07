@@ -535,9 +535,12 @@ class CrossAttentionPatch:
 
             if mask is not None:
                 # TODO: needs checking
-                mask_h = lh / math.sqrt(lh * lw / qs)
-                mask_h = int(mask_h) + int((qs % int(mask_h)) != 0)
-                mask_w = qs // mask_h
+                # mask_h = lh / math.sqrt(lh * lw / qs)
+                # mask_h = int(mask_h) + int((qs % int(mask_h)) != 0)
+                # mask_w = qs // mask_h
+
+                mask_h = int(lh / math.sqrt(lh * lw / qs))
+                mask_w = int(lw / math.sqrt(lh * lw / qs))
 
                 # check if using AnimateDiff and sliding context window
                 if (mask.shape[0] > 1 and ad_params is not None and ad_params["sub_idxs"] is not None):
@@ -572,6 +575,7 @@ class CrossAttentionPatch:
                 mask_downsample = mask_downsample.repeat(len(cond_or_uncond), 1, 1)
                 mask_downsample = mask_downsample.view(mask_downsample.shape[0], -1, 1).repeat(1, 1, out.shape[2])
 
+                mask_downsample = F.interpolate(mask_downsample.unsqueeze(1), size=(out_ip.shape[1], out_ip.shape[2]), mode="nearest-exact").squeeze(1)
                 out_ip = out_ip * mask_downsample
 
             out = out + out_ip
