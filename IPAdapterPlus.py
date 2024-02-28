@@ -540,8 +540,8 @@ class IPAdapter(nn.Module):
         image_proj_model = MLPProjModel_aravind(
             cross_attention_dim=self.cross_attention_dim,
             clip_embeddings_dim=self.clip_embeddings_dim,
-            clip_extra_context_tokens=self.clip_extra_context_tokens,
-        ).to(self.device, dtype=torch.float16)
+            clip_extra_context_tokens=16,
+        )
 
         return image_proj_model
 
@@ -943,16 +943,38 @@ class IPAdapterApply:
         ) else torch.float32
         self.device = comfy.model_management.get_torch_device()
         self.weight = weight
-        self.is_full = "proj.3.weight" in ipadapter["image_proj"]
-        self.is_portrait = "proj.2.weight" in ipadapter[
-            "image_proj"] and not "proj.3.weight" in ipadapter[
-                "image_proj"] and not "0.to_q_lora.down.weight" in ipadapter[
-                    "ip_adapter"]
-        self.is_faceid = self.is_portrait or "0.to_q_lora.down.weight" in ipadapter[
-            "ip_adapter"]
-        self.is_plus = (self.is_full or "latents" in ipadapter["image_proj"]
-                        or "perceiver_resampler.proj_in.weight"
-                        in ipadapter["image_proj"])
+
+        self.is_aravind = ('norm.bias' in ipadapter["image_proj"]) and (
+            'norm.weight' in ipadapter["image_proj"]) and (
+                'proj.0.bias' in ipadapter["image_proj"]) and (
+                    'proj.0.weight' in ipadapter["image_proj"]) and (
+                        'proj.2.bias' in ipadapter["image_proj"]) and (
+                            'proj.2.weight' in ipadapter["image_proj"])
+
+        print(ipadapter["image_proj"].keys())
+        print('DEBUG: ', self.is_aravind)
+
+        if self.is_aravind:
+
+            self.is_full = False
+            self.is_portrait = False
+            self.is_faceid = False
+            self.is_plus = False
+
+        else:
+
+            self.is_full = "proj.3.weight" in ipadapter["image_proj"]
+            self.is_portrait = "proj.2.weight" in ipadapter[
+                "image_proj"] and not "proj.3.weight" in ipadapter[
+                    "image_proj"] and not "0.to_q_lora.down.weight" in ipadapter[
+                        "ip_adapter"]
+            self.is_faceid = self.is_portrait or "0.to_q_lora.down.weight" in ipadapter[
+                "ip_adapter"]
+            self.is_plus = (self.is_full
+                            or "latents" in ipadapter["image_proj"]
+                            or "perceiver_resampler.proj_in.weight"
+                            in ipadapter["image_proj"])
+
         is_tiled = True if short_side_tiles > 0 else False
 
         if is_tiled:
@@ -966,7 +988,7 @@ class IPAdapterApply:
             "1.to_k_ip.weight"].shape[1]
         self.is_sdxl = output_cross_attention_dim == 2048
         cross_attention_dim = 1280 if self.is_plus and self.is_sdxl and not self.is_faceid else output_cross_attention_dim
-        clip_extra_context_tokens = 16 if self.is_plus or self.is_portrait else 4
+        clip_extra_context_tokens = 16 if self.is_plus or self.is_portrait or self.is_aravind else 4
 
         if embeds is not None:
             embeds = torch.unbind(embeds)
@@ -1064,6 +1086,7 @@ class IPAdapterApply:
             is_plus=self.is_plus,
             is_full=self.is_full,
             is_faceid=self.is_faceid,
+            is_aravind=self.is_aravind,
         )
 
         self.ipadapter.to(self.device, dtype=self.dtype)
